@@ -46,13 +46,19 @@
 
 #include "config/runtime_config.h"
 
-int16_t accSmooth[XYZ_AXIS_COUNT];
-int32_t accSum[XYZ_AXIS_COUNT];
-int16_t gyroData[FLIGHT_DYNAMICS_INDEX_COUNT] = { 0, 0, 0 };
+#define IMU_VELOCITY_CALCULATION_RATE_HZ    40  // Calculate velocity based on acceleration at this rate
 
-uint32_t accTimeSum = 0;        // keep track for integration of acc
-int accSumCount = 0;
-float accVelScale;
+bool imuIsVelocityReferenceAvailable[XYZ_AXIS_COUNT];   // Automagically detect if we should use ACC to calculate velocities
+float imuAverageVelocity[XYZ_AXIS_COUNT];
+float imuAverageAcceleration[XYZ_AXIS_COUNT];
+
+static int32_t accSum[XYZ_AXIS_COUNT];
+static uint32_t accTimeSum = 0;        // keep track for integration of acc
+static int accSumCount = 0;
+static float accVelScale;
+
+int16_t accSmooth[XYZ_AXIS_COUNT];
+int16_t gyroData[FLIGHT_DYNAMICS_INDEX_COUNT] = { 0, 0, 0 };
 
 int16_t smallAngle = 0;
 
@@ -87,9 +93,17 @@ void imuConfigure(
 
 void imuInit()
 {
+    int axis;
+
     smallAngle = lrintf(acc_1G * cosf(degreesToRadians(imuRuntimeConfig->small_angle)));
     accVelScale = 9.80665f / acc_1G / 10000.0f;
     gyroScaleRad = gyro.scale * (M_PIf / 180.0f) * 0.000001f;
+    
+    for (axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+        imuIsVelocityReferenceAvailable[axis] = false;
+        imuAverageVelocity[axis] = 0;
+        imuAverageAcceleration[axis] = 0;
+    }
 }
 
 float calculateThrottleAngleScale(uint16_t throttle_correction_angle)
@@ -122,7 +136,7 @@ float calculateAccZLowPassFilterRCTimeConstant(float accz_lpf_cutoff)
 
 t_fp_vector EstG;
 
-void imuResetAccelerationSum(void)
+static void imuResetAccelerationSum(void)
 {
     accSum[0] = 0;
     accSum[1] = 0;
@@ -131,10 +145,19 @@ void imuResetAccelerationSum(void)
     accTimeSum = 0;
 }
 
+void imuApplyFilterToActualVelocity(uint8_t axis, float cfFactor, float referenceVelocity)
+{
+    // apply Complimentary Filter to keep the calculated velocity based on reference (near real) velocity.
+    imuAverageVelocity[axis] = imuAverageVelocity[axis] * cfFactor + referenceVelocity * (1.0f - cfFactor);
+    imuIsVelocityReferenceAvailable[axis] = true;
+}
+
 // rotate acc into Earth frame and calculate acceleration in it
 void imuCalculateAcceleration(uint32_t deltaT)
 {
     static int32_t accZoffset = 0;
+    static float accx_smooth = 0;
+    static float accy_smooth = 0;
     static float accz_smooth = 0;
     float dT;
     fp_angles_t rpy;
@@ -163,16 +186,35 @@ void imuCalculateAcceleration(uint32_t deltaT)
     } else
         accel_ned.V.Z -= acc_1G;
 
+    accx_smooth = accx_smooth + (dT / (fc_acc + dT)) * (accel_ned.V.X - accx_smooth); // low pass filter
+    accy_smooth = accy_smooth + (dT / (fc_acc + dT)) * (accel_ned.V.Y - accy_smooth); // low pass filter
     accz_smooth = accz_smooth + (dT / (fc_acc + dT)) * (accel_ned.V.Z - accz_smooth); // low pass filter
 
+    // Use accelerometer to calculate average acceleration and most recent velocity
+    // Inspired by and loosely based on CrashPilot's TestCode3
+
     // apply Deadband to reduce integration drift and vibration influence
-    accSum[X] += applyDeadband(lrintf(accel_ned.V.X), accDeadband->xy);
-    accSum[Y] += applyDeadband(lrintf(accel_ned.V.Y), accDeadband->xy);
+    accSum[X] += applyDeadband(lrintf(accx_smooth), accDeadband->xy);
+    accSum[Y] += applyDeadband(lrintf(accy_smooth), accDeadband->xy);
     accSum[Z] += applyDeadband(lrintf(accz_smooth), accDeadband->z);
 
     // sum up Values for later integration to get velocity and distance
     accTimeSum += deltaT;
     accSumCount++;
+    
+    if (accTimeSum > (1000000 / IMU_VELOCITY_CALCULATION_RATE_HZ)) {
+        int axis;
+        
+        for (axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            imuAverageAcceleration[axis] = ((float)accSum[axis] / (float)accSumCount) * accVelScale;
+            
+            if (imuIsVelocityReferenceAvailable[axis]) {
+                imuAverageVelocity[axis] += imuAverageAcceleration[axis] * (float)accTimeSum;
+            }
+        }
+        
+        imuResetAccelerationSum();
+    }
 }
 
 /*

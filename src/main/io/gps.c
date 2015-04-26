@@ -43,7 +43,7 @@
 
 #include "flight/gps_conversion.h"
 #include "flight/pid.h"
-#include "flight/navigation.h"
+#include "flight/navigation_rewrite.h"
 
 #include "config/config.h"
 #include "config/runtime_config.h"
@@ -358,6 +358,23 @@ void gpsInitHardware(void)
 void gpsThread(void)
 {
     // read out available GPS bytes
+    /*
+    static uint32_t latestMillis = 0;
+    if (millis() - latestMillis > 200) {
+    sensorsSet(SENSOR_GPS);
+    ENABLE_STATE(GPS_FIX);
+    GPS_numSat = 6;
+    GPS_coord[LAT] = 505225086 + 100 * sin(millis() / 180.0f * 3.1415926f / 50.0f);
+    GPS_coord[LON] = 1370001560;
+    GPS_altitude = 700;
+    GPS_speed = 0;
+    GPS_update |= 2;
+    onNewGPSData(GPS_coord[LAT], GPS_coord[LON]);
+    //debug[3] = GPS_coord[LAT] - 505225086;
+    latestMillis = millis();
+    }
+    return;
+    */
     if (gpsPort) {
         while (serialTotalBytesWaiting(gpsPort))
             gpsNewData(serialRead(gpsPort));
@@ -418,7 +435,7 @@ static void gpsNewData(uint16_t c)
     debug[3] = GPS_update;
 #endif
 
-    onGpsNewData();
+    onNewGPSData(GPS_coord[LAT], GPS_coord[LON]);
 }
 
 bool gpsNewFrame(uint8_t c)

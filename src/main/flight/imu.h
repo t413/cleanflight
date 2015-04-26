@@ -17,13 +17,13 @@
 
 #pragma once
 
+#include "flight/pid.h"
+
 extern int16_t throttleAngleCorrection;
-extern uint32_t accTimeSum;
-extern int accSumCount;
-extern float accVelScale;
 extern t_fp_vector EstG;
 extern int16_t accSmooth[XYZ_AXIS_COUNT];
-extern int32_t accSum[XYZ_AXIS_COUNT];
+extern float imuAverageVelocity[XYZ_AXIS_COUNT];
+extern float imuAverageAcceleration[XYZ_AXIS_COUNT];
 extern int16_t gyroData[FLIGHT_DYNAMICS_INDEX_COUNT];
 extern int16_t smallAngle;
 
@@ -68,7 +68,4 @@ int16_t calculateThrottleAngleCorrection(uint8_t throttle_correction_value);
 float calculateAccZLowPassFilterRCTimeConstant(float accz_lpf_cutoff);
 
 int16_t imuCalculateHeading(t_fp_vector *vec);
-
-void imuResetAccelerationSum(void);
-
-
+void imuApplyFilterToActualVelocity(uint8_t axis, float cfFactor, float referenceVelocity);

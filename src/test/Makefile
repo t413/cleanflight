@@ -58,6 +58,7 @@ TESTS = \
 	ws2811_unittest \
 	encoding_unittest \
 	io_serial_unittest \
+    navigation_rewrite_unittest \
 	lowpass_unittest
 
 # All Google Test headers.  Usually you shouldn't change this
@@ -454,7 +455,7 @@ $(OBJECT_DIR)/rx_rx_unittest.o : \
 
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXX_FLAGS) $(TEST_CFLAGS) -c $(TEST_DIR)/rx_rx_unittest.cc -o $@
-
+    
 rx_rx_unittest : \
 	$(OBJECT_DIR)/rx/rx.o \
 	$(OBJECT_DIR)/rx_rx_unittest.o \

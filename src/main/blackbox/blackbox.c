@@ -66,10 +66,9 @@
 #include "telemetry/telemetry.h"
 
 #include "flight/mixer.h"
-#include "flight/altitudehold.h"
 #include "flight/failsafe.h"
 #include "flight/imu.h"
-#include "flight/navigation.h"
+#include "flight/navigation_rewrite.h"
 
 #include "config/runtime_config.h"
 #include "config/config.h"
@@ -690,12 +689,12 @@ static void writeGPSHomeFrame()
 {
     blackboxWrite('H');
 
-    blackboxWriteSignedVB(GPS_home[0]);
-    blackboxWriteSignedVB(GPS_home[1]);
+    blackboxWriteSignedVB(homePosition.coordinates[0]);
+    blackboxWriteSignedVB(homePosition.coordinates[1]);
     //TODO it'd be great if we could grab the GPS current time and write that too
 
-    gpsHistory.GPS_home[0] = GPS_home[0];
-    gpsHistory.GPS_home[1] = GPS_home[1];
+    gpsHistory.GPS_home[0] = homePosition.coordinates[0];
+    gpsHistory.GPS_home[1] = homePosition.coordinates[1];
 }
 
 static void writeGPSFrame()
@@ -1087,7 +1086,7 @@ void handleBlackbox(void)
                      * We write it periodically so that if one Home Frame goes missing, the GPS coordinates can
                      * still be interpreted correctly.
                      */
-                    if (GPS_home[0] != gpsHistory.GPS_home[0] || GPS_home[1] != gpsHistory.GPS_home[1]
+                    if (homePosition.coordinates[0] != gpsHistory.GPS_home[0] || homePosition.coordinates[1] != gpsHistory.GPS_home[1]
                         || (blackboxPFrameIndex == BLACKBOX_I_INTERVAL / 2 && blackboxIFrameIndex % 128 == 0)) {
 
                         writeGPSHomeFrame();

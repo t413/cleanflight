@@ -19,6 +19,10 @@
 #include "sensors/battery.h"
 
 void sonarInit(batteryConfig_t *batteryConfig);
+
+// Maximum sonar range we expect to be a valid reading
+#define SONAR_MAX_RANGE     300
+
 void sonarUpdate(void);
 
 int32_t sonarRead(void);

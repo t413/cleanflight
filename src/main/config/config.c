@@ -61,8 +61,7 @@
 #include "flight/pid.h"
 #include "flight/imu.h"
 #include "flight/failsafe.h"
-#include "flight/altitudehold.h"
-#include "flight/navigation.h"
+#include "flight/navigation_rewrite.h"
 
 #include "config/runtime_config.h"
 #include "config/config.h"
@@ -197,15 +196,18 @@ static void resetPidProfile(pidProfile_t *pidProfile)
 }
 
 #ifdef GPS
-void resetGpsProfile(gpsProfile_t *gpsProfile)
+void resetNavProfile(navProfile_t *navProfile)
 {
-    gpsProfile->gps_wp_radius = 200;
-    gpsProfile->gps_lpf = 20;
-    gpsProfile->nav_slew_rate = 30;
-    gpsProfile->nav_controls_heading = 1;
-    gpsProfile->nav_speed_min = 100;
-    gpsProfile->nav_speed_max = 300;
-    gpsProfile->ap_mode = 40;
+    navProfile->nav_wp_radius = 200;
+    navProfile->nav_lpf = 20;
+    navProfile->nav_speed_min = 100;
+    navProfile->nav_speed_max = 300;
+    navProfile->nav_manual_speed_horizontal = 300;
+    navProfile->nav_manual_speed_vertical = 100;
+    navProfile->nav_rc_deadband = 40;
+    navProfile->nav_use_midrc_for_althold = 0;  // Don't use midrc for throttle control
+    navProfile->gps_cf_vel = 0.6f;  // GPS INS The LOWER the value the closer to gps speed // Dont go to high here
+    navProfile->nav_min_rth_distance = 0;
 }
 #endif
 
@@ -314,7 +316,6 @@ void resetRcControlsConfig(rcControlsConfig_t *rcControlsConfig) {
     rcControlsConfig->deadband = 0;
     rcControlsConfig->yaw_deadband = 0;
     rcControlsConfig->alt_hold_deadband = 40;
-    rcControlsConfig->alt_hold_fast_change = 1;
 }
 
 void resetMixerConfig(mixerConfig_t *mixerConfig) {
@@ -500,7 +501,7 @@ static void resetConf(void)
 #endif
 
 #ifdef GPS
-    resetGpsProfile(&currentProfile->gpsProfile);
+    resetNavProfile(&currentProfile->navProfile);
 #endif
 
     // custom mixer. clear by defaults.
@@ -677,11 +678,6 @@ void activateConfig(void)
 
     pidSetController(currentProfile->pidProfile.pidController);
 
-#ifdef GPS
-    gpsUseProfile(&currentProfile->gpsProfile);
-    gpsUsePIDs(&currentProfile->pidProfile);
-#endif
-
     useFailsafeConfig(&masterConfig.failsafeConfig);
     setAccelerationTrims(&masterConfig.accZero);
 
@@ -711,12 +707,11 @@ void activateConfig(void)
         currentProfile->throttle_correction_angle
     );
 
-    configureAltitudeHold(
-        &currentProfile->pidProfile,
-        &currentProfile->barometerConfig,
-        &currentProfile->rcControlsConfig,
-        &masterConfig.escAndServoConfig
-    );
+#ifdef GPS
+    navigationUseProfile(&currentProfile->navProfile);
+    navigationUsePIDs(&currentProfile->pidProfile);
+    navigationUseBarometerConfig(&currentProfile->barometerConfig);
+#endif
 
 #ifdef BARO
     useBarometerConfig(&currentProfile->barometerConfig);
