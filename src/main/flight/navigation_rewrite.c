@@ -109,6 +109,7 @@ static int32_t desiredHeading;
 
 // Desired pitch/roll/yaw/throttle adjustments
 static int16_t rcAdjustment[4];
+int16_t rcCommandNav[4];
 
 // Current navigation mode & profile
 navigationMode_e navMode = NAV_MODE_NONE;    // Navigation mode
@@ -664,7 +665,14 @@ void applyWaypointNavigationAndAltitudeHold(void)
     
     // If throttle low don't apply navigation either 
     // TODO
+    
+    // Set rcCommandNav to rcCommand (passthrough control)
+    rcCommandNav[PITCH] = rcCommand[PITCH];
+    rcCommandNav[ROLL] = rcCommand[ROLL];
+    rcCommandNav[YAW] = rcCommand[YAW];
+    rcCommandNav[THROTTLE] = rcCommand[THROTTLE];
 
+    // Apply navigation adjustments
     if (STATE(FIXED_WING)) { // FIXED_WING
         // TODO
     }
@@ -679,7 +687,7 @@ void applyWaypointNavigationAndAltitudeHold(void)
             calculateThrottleAdjustment(dTnav);
 
             // Apply rcAdjustment to throttle
-            rcCommand[THROTTLE] = constrain(altholdInitialThrottle + rcAdjustment[THROTTLE], masterConfig.escAndServoConfig.minthrottle, masterConfig.escAndServoConfig.maxthrottle);
+            rcCommandNav[THROTTLE] = constrain(altholdInitialThrottle + rcAdjustment[THROTTLE], masterConfig.escAndServoConfig.minthrottle, masterConfig.escAndServoConfig.maxthrottle);
         }
 
         if (navShouldApplyPosHold() || navShouldApplyWaypoint() || navShouldApplyHeadingControl()) {
@@ -700,12 +708,12 @@ void applyWaypointNavigationAndAltitudeHold(void)
 
             // Apply rcAdjustment to pitch/roll
             if (navShouldApplyPosHold() || navShouldApplyWaypoint()) {
-                rcCommand[PITCH] = rcAdjustment[PITCH];
-                rcCommand[ROLL] = rcAdjustment[ROLL];
+                rcCommandNav[PITCH] = constrain(rcAdjustment[PITCH], -NAV_BANK_MAX, NAV_BANK_MAX);
+                rcCommandNav[ROLL] = constrain(rcAdjustment[ROLL], -NAV_BANK_MAX, NAV_BANK_MAX);
             }
 
             if (navShouldApplyHeadingControl()) {
-                rcCommand[YAW] = rcAdjustment[YAW];
+                rcCommandNav[YAW] = constrain(rcAdjustment[YAW], -500, 500);
             }
         }
     }

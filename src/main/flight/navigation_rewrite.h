@@ -83,3 +83,5 @@ extern int32_t directionToHome;
 extern navPosition3D_t homePosition;
 extern navPosition3D_t activeWpOrHoldPosition;    // Used for WP/ALTHOLD/PH/RTH
 extern navPosition3D_t actualPosition;
+
+extern int16_t rcCommandNav[4];
