@@ -364,7 +364,8 @@ void gpsThread(void)
         sensorsSet(SENSOR_GPS);
         ENABLE_STATE(GPS_FIX);
         GPS_numSat = 6;
-        GPS_coord[LAT] = 505225086 + 100 * sin(millis() / 180.0f * 3.1415926f / 50.0f);
+        //GPS_coord[LAT] = 505225086 + 100 * sin(millis() / 180.0f * 3.1415926f / 50.0f);
+        GPS_coord[LAT] = 505225086 + (millis() > 10000 ? 100 : 0);
         GPS_coord[LON] = 1370001560;
         GPS_altitude = 700;
         GPS_speed = 0;

@@ -27,7 +27,7 @@
 #define LANDING_DETECTION_TIMEOUT   10000000     // 10 second timeout
 #define RADX100                     0.000174532925f
 #define CROSSTRACK_GAIN             1
-#define NAV_BANK_MAX                3000 // 30deg max banking when navigating (just for security and testing)
+#define NAV_ROLL_PITCH_MAX          300 // Max control input from NAV
 
 // Should apply position-to-velocity PID controller for POS_HOLD
 #define navShouldApplyPosHold() ((navMode & (NAV_MODE_POSHOLD_2D | NAV_MODE_POSHOLD_3D)) != 0)

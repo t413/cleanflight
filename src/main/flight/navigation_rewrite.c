@@ -128,7 +128,7 @@ static float pidGetP(float error, PID *pid)
 static float pidGetI(float error, float dt, PID *pid)
 {
     pid->integrator += ((float)error * pid->param.kI) * dt;
-    pid->integrator = constrain(pid->integrator, -pid->param.Imax, pid->param.Imax);
+    pid->integrator = constrainf(pid->integrator, -pid->param.Imax, pid->param.Imax);
     return pid->integrator;
 }
 
@@ -147,6 +147,11 @@ static float pidGetD(float input, float dt, PID *pid)
     pid->last_derivative = pid->derivative;
     // add in derivative component
     return pid->param.kD * pid->derivative;
+}
+
+static float pidGetPI(float error, float dt, PID *pid)
+{
+    return pidGetP(error, pid) + pidGetI(error, dt, pid);
 }
 
 static float pidGetPID(float error, float dt, PID *pid)
@@ -311,9 +316,8 @@ static void calculateDesiredHorizontalVelocity(navPosition3D_t *currentPos, navP
         // Algorithm depends on navigation mode (WP/RTH or PH)
         // We use PH PID governors if explicitly in NAV_MODE_POSHOLD or within 2*waypoint radius
         if (navShouldApplyPosHold() || (wpDistance < 2 * navProfile->nav_wp_radius)) {
-            // Use only P term for PH velocity calculation
-            desiredHorizontalVel[X] = pidGetP(posError.coordinates[LON], &positionPID);
-            desiredHorizontalVel[Y] = pidGetP(posError.coordinates[LAT], &positionPID);
+            desiredHorizontalVel[X] = pidGetPI(posError.coordinates[LON], dTnav, &positionPID);
+            desiredHorizontalVel[Y] = pidGetPI(posError.coordinates[LAT], dTnav, &positionPID);
         }
         else if (navShouldApplyWaypoint()) {
             float navCurrentSpeed = sqrtf(sq(actualHorizontalVelocity[LON] + sq(actualHorizontalVelocity[LAT])));
@@ -496,7 +500,7 @@ static void calculateAttitudeAdjustment(float dTnav)
             // Calculate pitch/roll
             for (axis = 0; axis < 2; axis++) {
                 float error = desiredAircraftVel[axis] - actualAircraftVel[axis];
-                error = constrainf(error, -1000, 1000); // limit error to 10 m/s
+                error = constrainf(error, -500, 500); // limit error to 5 m/s
 
                 rcAdjustment[axis] = pidGetP(error, &posholdRatePID[axis]) +
                                      pidGetI(error, dTnav, &posholdRatePID[axis]);
@@ -505,12 +509,12 @@ static void calculateAttitudeAdjustment(float dTnav)
                 d = constrainf(d, -2000, 2000);
 
                 // get rid of noise
-                if (ABS(actualHorizontalVelocity[axis]) < 50)
+                if (ABS(actualHorizontalVelocity[axis]) < 10)
                     d = 0;
 
                 rcAdjustment[axis] += d;
 
-                rcAdjustment[axis] = constrain(rcAdjustment[axis], -NAV_BANK_MAX, NAV_BANK_MAX);
+                rcAdjustment[axis] = constrain(rcAdjustment[axis] / 10, -NAV_ROLL_PITCH_MAX, NAV_ROLL_PITCH_MAX);
                 navigationRatePID[axis].integrator = posholdRatePID[axis].integrator;
             }
         }
@@ -518,10 +522,10 @@ static void calculateAttitudeAdjustment(float dTnav)
             // Calculate pitch/roll
             for (axis = 0; axis < 2; axis++) {
                 float error = desiredAircraftVel[axis] - actualAircraftVel[axis];
-                error = constrainf(error, -1000, 1000); // limit error to 10 m/s
+                error = constrainf(error, -500, 500); // limit error to 5 m/s
 
                 rcAdjustment[axis] = pidGetPID(error, dTnav, &navigationRatePID[axis]);
-                rcAdjustment[axis] = constrain(rcAdjustment[axis], -NAV_BANK_MAX, NAV_BANK_MAX);
+                rcAdjustment[axis] = constrain(rcAdjustment[axis] / 10, -NAV_ROLL_PITCH_MAX, NAV_ROLL_PITCH_MAX);
             }
         }
 
@@ -530,7 +534,7 @@ static void calculateAttitudeAdjustment(float dTnav)
             int32_t headingError = wrap_18000((actualPosition.heading - desiredHeading) * 100);
             headingError *= masterConfig.yaw_control_direction;
 
-            headingError = constrain(headingError, -30000, +30000); // limit error to +- 30 degrees to avoid fast rotation
+            headingError = constrain(headingError, -3000, +3000); // limit error to +- 30 degrees to avoid fast rotation
 
             // FIXME: SMALL_ANGLE might prevent NAV from adjusting yaw when banking is too high (i.e. nav in high wind)
             if (STATE(SMALL_ANGLE)) {
@@ -660,7 +664,7 @@ void applyWaypointNavigationAndAltitudeHold(void)
 
     // Shouldn't apply navigation corrections when not armed
     if (!ARMING_FLAG(ARMED)) {
-        //return;
+        return;
     }
     
     // If throttle low don't apply navigation either 
@@ -708,8 +712,8 @@ void applyWaypointNavigationAndAltitudeHold(void)
 
             // Apply rcAdjustment to pitch/roll
             if (navShouldApplyPosHold() || navShouldApplyWaypoint()) {
-                rcCommandNav[PITCH] = constrain(rcAdjustment[PITCH], -NAV_BANK_MAX, NAV_BANK_MAX);
-                rcCommandNav[ROLL] = constrain(rcAdjustment[ROLL], -NAV_BANK_MAX, NAV_BANK_MAX);
+                rcCommandNav[PITCH] = constrain(rcAdjustment[PITCH], -NAV_ROLL_PITCH_MAX, NAV_ROLL_PITCH_MAX);
+                rcCommandNav[ROLL] = constrain(rcAdjustment[ROLL], -NAV_ROLL_PITCH_MAX, NAV_ROLL_PITCH_MAX);
             }
 
             if (navShouldApplyHeadingControl()) {
@@ -718,15 +722,16 @@ void applyWaypointNavigationAndAltitudeHold(void)
         }
     }
 
-    /*
+/*    
     debug[0] = actualPosition.coordinates[LAT] - activeWpOrHoldPosition.coordinates[LAT];
     debug[1] = desiredHorizontalVel[Y];
-    debug[2] = rcCommandNav[PITCH];
-    debug[3] = rcCommandNav[ROLL];
+    debug[2] = actualHorizontalVelocity[Y];
+    debug[3] = rcCommandNav[PITCH];
+*/
     
-    //debug[0] = actualPosition.coordinates[LON] - 1370001560;
+    //debug[0] = rcCommandNav[THROTTLE];
     //debug[2] = desiredHorizontalVel[LON];
-    */
+    
 }
 
 /*-----------------------------------------------------------
@@ -964,18 +969,18 @@ void navigationUsePIDs(pidProfile_t *pidProfile)
 
     // Initialize position hold PI-controller
     pidInit(&positionPID, (float)pidProfile->P8[PIDPOS] / 100.0f,
-                             (float)pidProfile->I8[PIDPOS] / 100.0f,
-                             0,
-                             POSHOLD_IMAX * 100.0);
+                          (float)pidProfile->I8[PIDPOS] / 100.0f,
+                          0,
+                          POSHOLD_IMAX * 100.0);
 
     // Initialize altitude hold P-controller
     pidInit(&altitudePID, (float)pidProfile->P8[PIDALT] / 128.0f, 0, 0, 0);
 
     // Initialize vertical velocity PID-controller
     pidInit(&altitudeRatePID, (float)pidProfile->P8[PIDVEL] / 32.0f,
-                             (float)pidProfile->I8[PIDVEL] / 8192.0f,
-                             (float)pidProfile->D8[PIDVEL] / 256.0f,
-                             200.0);
+                              (float)pidProfile->I8[PIDVEL] / 8192.0f,
+                              (float)pidProfile->D8[PIDVEL] / 256.0f,
+                              200.0);
 
     // Initialize horizontal velocity PID-controllers
     for (axis = 0; axis < 2; axis++) {
