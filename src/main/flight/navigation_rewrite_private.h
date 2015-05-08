@@ -29,9 +29,6 @@
 #define CROSSTRACK_GAIN             1
 #define NAV_BANK_MAX                3000 // 30deg max banking when navigating (just for security and testing)
 
-#define NAV_X 1
-#define NAV_Y 0
-
 // Should apply position-to-velocity PID controller for POS_HOLD
 #define navShouldApplyPosHold() ((navMode & (NAV_MODE_POSHOLD_2D | NAV_MODE_POSHOLD_3D)) != 0)
 // Should apply position-to-velocity PID controller for waypoint navigation (WP/RTH)

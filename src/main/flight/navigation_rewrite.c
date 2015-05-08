@@ -77,7 +77,7 @@ static PID positionPID;     // Used for NAV_MODE_POSHOLD_2D, NAV_MODE_POSHOLD_3D
 // Heading PID
 static PID headingRatePID;      // Takes heading error (deg) and outputs yaw rate
 
-// NOTE: Input velocities are in *rotated* frame of reference (aircraft based, NAV_X = roll axis, NAV_Y = pitch axis)
+// NOTE: Input velocities are in *rotated* frame of reference (aircraft based, LON = roll axis, LAT = pitch axis)
 static PID altitudeRatePID;         // Takes desired velocity (cm/s) and outputs raw control adjustment
 static PID navigationRatePID[2];   // PID controller for WP and RTH
 static PID posholdRatePID[2];  // PID controller for PH
@@ -239,8 +239,8 @@ static void updateActualHorizontalPosition(int32_t newLat, int32_t newLon)
 
 static void updateActualHorizontalVelocity(float newLatVel, float newLonVel)
 {
-    actualHorizontalVelocity[NAV_X] = newLonVel;
-    actualHorizontalVelocity[NAV_Y] = newLatVel;
+    actualHorizontalVelocity[X] = newLonVel;
+    actualHorizontalVelocity[Y] = newLatVel;
 }
 
 static void updateActualAltitudeAndVelocity(float newAltitude, float newVelocity)
@@ -261,8 +261,8 @@ static void updateActualHeading(int32_t newHeading)
 #define TAN_89_99_DEGREES 5729.57795f
 static void calculateDistanceAndBearingToDestination(navPosition3D_t *currentPos, navPosition3D_t *destinationPos, uint32_t *dist, int32_t *bearing)
 {
-    float dX = (destinationPos->coordinates[NAV_X] - currentPos->coordinates[NAV_X]) * gpsScaleLonDown;
-    float dY = destinationPos->coordinates[NAV_Y] - currentPos->coordinates[NAV_Y];
+    float dX = (destinationPos->coordinates[LON] - currentPos->coordinates[LON]) * gpsScaleLonDown;
+    float dY = destinationPos->coordinates[LAT] - currentPos->coordinates[LAT];
 
     if (dist) {
         *dist = sqrtf(sq(dX) + sq(dY)) * DISTANCE_BETWEEN_TWO_LONGITUDE_POINTS_AT_EQUATOR;
@@ -278,8 +278,8 @@ static void calculateDistanceAndBearingToDestination(navPosition3D_t *currentPos
 // Takes current and previous position in centidegrees and calculates error in cm
 static void calculatePositionError(navPosition3D_t *currentPos, navPosition3D_t *destinationPos, navPosition3D_t *error)
 {
-    error->coordinates[NAV_X] = (destinationPos->coordinates[NAV_X] - currentPos->coordinates[NAV_X]) * gpsScaleLonDown * DISTANCE_BETWEEN_TWO_LONGITUDE_POINTS_AT_EQUATOR;
-    error->coordinates[NAV_Y] = (destinationPos->coordinates[NAV_Y] - currentPos->coordinates[NAV_Y]) * DISTANCE_BETWEEN_TWO_LONGITUDE_POINTS_AT_EQUATOR;
+    error->coordinates[LON] = (destinationPos->coordinates[LON] - currentPos->coordinates[LON]) * gpsScaleLonDown * DISTANCE_BETWEEN_TWO_LONGITUDE_POINTS_AT_EQUATOR;
+    error->coordinates[LAT] = (destinationPos->coordinates[LAT] - currentPos->coordinates[LAT]) * DISTANCE_BETWEEN_TWO_LONGITUDE_POINTS_AT_EQUATOR;
     error->altitude = destinationPos->altitude - currentPos->altitude;
 }
 
@@ -312,11 +312,11 @@ static void calculateDesiredHorizontalVelocity(navPosition3D_t *currentPos, navP
         // We use PH PID governors if explicitly in NAV_MODE_POSHOLD or within 2*waypoint radius
         if (navShouldApplyPosHold() || (wpDistance < 2 * navProfile->nav_wp_radius)) {
             // Use only P term for PH velocity calculation
-            desiredHorizontalVel[NAV_X] = pidGetP(posError.coordinates[NAV_X], &positionPID);
-            desiredHorizontalVel[NAV_Y] = pidGetP(posError.coordinates[NAV_Y], &positionPID);
+            desiredHorizontalVel[X] = pidGetP(posError.coordinates[LON], &positionPID);
+            desiredHorizontalVel[Y] = pidGetP(posError.coordinates[LAT], &positionPID);
         }
         else if (navShouldApplyWaypoint()) {
-            float navCurrentSpeed = sqrtf(sq(actualHorizontalVelocity[NAV_X] + sq(actualHorizontalVelocity[NAV_Y])));
+            float navCurrentSpeed = sqrtf(sq(actualHorizontalVelocity[LON] + sq(actualHorizontalVelocity[LAT])));
             float targetSpeed = MIN(navProfile->nav_speed_max, wpDistance / 2.0f); // if close - navigate to reach a waypoint within 2 sec.
 
             // Avoid fast acceleration, increase speed in small steps
@@ -327,12 +327,12 @@ static void calculateDesiredHorizontalVelocity(navPosition3D_t *currentPos, navP
             targetSpeed = MAX(navProfile->nav_speed_min, targetSpeed);  // go at least min_speed
 
             // Calculate desired horizontal velocities
-            desiredHorizontalVel[NAV_X] = targetSpeed * (posError.coordinates[NAV_X] / wpDistance);
-            desiredHorizontalVel[NAV_Y] = targetSpeed * (posError.coordinates[NAV_Y] / wpDistance);
+            desiredHorizontalVel[X] = targetSpeed * (posError.coordinates[LON] / wpDistance);
+            desiredHorizontalVel[Y] = targetSpeed * (posError.coordinates[LAT] / wpDistance);
         }
         else {
-            desiredHorizontalVel[NAV_X] = 0;
-            desiredHorizontalVel[NAV_Y] = 0;
+            desiredHorizontalVel[X] = 0;
+            desiredHorizontalVel[Y] = 0;
         }
     }
 }
@@ -412,8 +412,8 @@ static void calculateDesiredVerticalVelocity(navPosition3D_t *currentPos, navPos
 void resetHomePosition(void)
 {
     if (STATE(GPS_FIX) && GPS_numSat >= 5) {
-        homePosition.coordinates[NAV_X] = actualPosition.coordinates[NAV_X];
-        homePosition.coordinates[NAV_Y] = actualPosition.coordinates[NAV_Y];
+        homePosition.coordinates[LON] = actualPosition.coordinates[LON];
+        homePosition.coordinates[LAT] = actualPosition.coordinates[LAT];
         homePosition.altitude = actualPosition.altitude;
         homePosition.heading = actualPosition.heading;
         ENABLE_STATE(GPS_FIX_HOME);
@@ -479,12 +479,12 @@ static void calculateAttitudeAdjustment(float dTnav)
         float cos_yaw_x = cosf(-actualPosition.heading * RADX100);
 
         float desiredAircraftVel[2];
-        desiredAircraftVel[NAV_X] = desiredHorizontalVel[NAV_X] * cos_yaw_x - desiredHorizontalVel[NAV_Y] * sin_yaw_y;
-        desiredAircraftVel[NAV_Y] = desiredHorizontalVel[NAV_X] * sin_yaw_y + desiredHorizontalVel[NAV_Y] * cos_yaw_x;
+        desiredAircraftVel[X] = desiredHorizontalVel[X] * cos_yaw_x - desiredHorizontalVel[Y] * sin_yaw_y;
+        desiredAircraftVel[Y] = desiredHorizontalVel[X] * sin_yaw_y + desiredHorizontalVel[Y] * cos_yaw_x;
 
         float actualAircraftVel[2];
-        actualAircraftVel[NAV_X] = actualHorizontalVelocity[NAV_X] * cos_yaw_x - actualHorizontalVelocity[NAV_Y] * sin_yaw_y;
-        actualAircraftVel[NAV_Y] = actualHorizontalVelocity[NAV_X] * sin_yaw_y + actualHorizontalVelocity[NAV_Y] * cos_yaw_x;
+        actualAircraftVel[X] = actualHorizontalVelocity[X] * cos_yaw_x - actualHorizontalVelocity[Y] * sin_yaw_y;
+        actualAircraftVel[Y] = actualHorizontalVelocity[X] * sin_yaw_y + actualHorizontalVelocity[Y] * cos_yaw_x;
 
         // Start with zero adjustments
         for (axis = 0; axis < 4; axis++) {
@@ -616,8 +616,8 @@ static void adjustHorizontalVelocityFromRCInput()
             float sin_yaw_y = sinf(actualPosition.heading * RADX100);
             float cos_yaw_x = cosf(actualPosition.heading * RADX100);
 
-            desiredHorizontalVel[NAV_X] = rcVelX * cos_yaw_x - rcVelY * sin_yaw_y;
-            desiredHorizontalVel[NAV_Y] = rcVelX * sin_yaw_y + rcVelY * cos_yaw_x;
+            desiredHorizontalVel[X] = rcVelX * cos_yaw_x - rcVelY * sin_yaw_y;
+            desiredHorizontalVel[Y] = rcVelX * sin_yaw_y + rcVelY * cos_yaw_x;
 
             // We are in position hold mode, so adjust poshold setpoint
             // Regardless of 2D or 3D mode we are only adjusting horizontal position
@@ -660,7 +660,7 @@ void applyWaypointNavigationAndAltitudeHold(void)
 
     // Shouldn't apply navigation corrections when not armed
     if (!ARMING_FLAG(ARMED)) {
-        return;
+        //return;
     }
     
     // If throttle low don't apply navigation either 
@@ -719,13 +719,13 @@ void applyWaypointNavigationAndAltitudeHold(void)
     }
 
     /*
-    debug[0] = actualPosition.coordinates[NAV_Y] - 505225086;
-    debug[1] = desiredHorizontalVel[NAV_Y];
-    debug[2] = rcCommand[PITCH];
-    debug[3] = rcCommand[ROLL];
+    debug[0] = actualPosition.coordinates[LAT] - activeWpOrHoldPosition.coordinates[LAT];
+    debug[1] = desiredHorizontalVel[Y];
+    debug[2] = rcCommandNav[PITCH];
+    debug[3] = rcCommandNav[ROLL];
     
-    //debug[0] = actualPosition.coordinates[NAV_X] - 1370001560;
-    //debug[2] = desiredHorizontalVel[NAV_X];
+    //debug[0] = actualPosition.coordinates[LON] - 1370001560;
+    //debug[2] = desiredHorizontalVel[LON];
     */
 }
 
