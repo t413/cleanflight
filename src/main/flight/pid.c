@@ -92,13 +92,6 @@ void pidResetErrorGyro(void)
 
 const angle_index_t rcAliasToAngleIndexMap[] = { AI_ROLL, AI_PITCH };
 
-// If GPS defined, use rcCommandNav (adjusted by navigation)
-#ifdef GPS
-    #define rcCommandForPID rcCommandNav
-#else
-    #define rcCommandForPID rcCommand
-#endif
-
 #ifdef AUTOTUNE
 bool shouldAutotune(void)
 {
@@ -149,11 +142,11 @@ static void pidLuxFloat(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
         uint8_t rate = controlRateConfig->rates[axis];
 
         if (axis == FD_YAW) {
-            // YAW is always gyro-controlled (MAG correction is applied to rcCommandForPID) 100dps to 1100dps max yaw rate
-            AngleRate = (float)((rate + 10) * rcCommandForPID[YAW]) / 50.0f;
+            // YAW is always gyro-controlled (MAG correction is applied to rcCommand) 100dps to 1100dps max yaw rate
+            AngleRate = (float)((rate + 10) * rcCommand[YAW]) / 50.0f;
          } else {
             // calculate error and limit the angle to the max inclination
-            errorAngle = (constrain(rcCommandForPID[axis], -((int) max_angle_inclination),
+            errorAngle = (constrain(rcCommand[axis], -((int) max_angle_inclination),
                     +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis]) / 10.0f; // 16 bits is ok here
 
 #ifdef AUTOTUNE
@@ -167,7 +160,7 @@ static void pidLuxFloat(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
                 AngleRate = errorAngle * pidProfile->A_level;
             } else {
                 //control is GYRO based (ACRO and HORIZON - direct sticks control is applied to rate PID
-                AngleRate = (float)((rate + 20) * rcCommandForPID[axis]) / 50.0f; // 200dps to 1200dps max yaw rate
+                AngleRate = (float)((rate + 20) * rcCommand[axis]) / 50.0f; // 200dps to 1200dps max yaw rate
                 if (FLIGHT_MODE(HORIZON_MODE)) {
                     // mix up angle error to desired AngleRate to add a little auto-level feel
                     AngleRate += errorAngle * pidProfile->H_level * horizonLevelStrength;
@@ -180,7 +173,7 @@ static void pidLuxFloat(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
         // --------low-level gyro-based PID. ----------
         // Used in stand-alone mode for ACRO, controlled by higher level regulators in other modes
         // -----calculate scaled error.AngleRates
-        // multiplication of rcCommandForPID corresponds to changing the sticks scaling here
+        // multiplication of rcCommand corresponds to changing the sticks scaling here
         RateError = AngleRate - gyroRate;
 
         // -----calculate P component
@@ -232,12 +225,12 @@ static void pidMultiWii(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
     UNUSED(controlRateConfig);
 
     // **** PITCH & ROLL & YAW PID ****
-    prop = MIN(MAX(ABS(rcCommandForPID[PITCH]), ABS(rcCommandForPID[ROLL])), 500); // range [0;500]
+    prop = MIN(MAX(ABS(rcCommand[PITCH]), ABS(rcCommand[ROLL])), 500); // range [0;500]
 
     for (axis = 0; axis < 3; axis++) {
         if ((FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) && (axis == FD_ROLL || axis == FD_PITCH)) { // MODE relying on ACC
             // observe max inclination
-            errorAngle = constrain(2 * rcCommandForPID[axis], -((int) max_angle_inclination),
+            errorAngle = constrain(2 * rcCommand[axis], -((int) max_angle_inclination),
                     +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis];
 
 #ifdef AUTOTUNE
@@ -253,13 +246,13 @@ static void pidMultiWii(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
             ITermACC = (errorAngleI[axis] * pidProfile->I8[PIDLEVEL]) >> 12;
         }
         if (!FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE) || axis == FD_YAW) { // MODE relying on GYRO or YAW axis
-            error = (int32_t) rcCommandForPID[axis] * 10 * 8 / pidProfile->P8[axis];
+            error = (int32_t) rcCommand[axis] * 10 * 8 / pidProfile->P8[axis];
             error -= gyroData[axis] / 4;
 
-            PTermGYRO = rcCommandForPID[axis];
+            PTermGYRO = rcCommand[axis];
 
             errorGyroI[axis] = constrain(errorGyroI[axis] + error, -16000, +16000); // WindUp
-            if ((ABS(gyroData[axis]) > (640 * 4)) || (axis == FD_YAW && ABS(rcCommandForPID[axis]) > 100))
+            if ((ABS(gyroData[axis]) > (640 * 4)) || (axis == FD_YAW && ABS(rcCommand[axis]) > 100))
                 errorGyroI[axis] = 0;
 
             ITermGYRO = (errorGyroI[axis] / 125 * pidProfile->I8[axis]) / 64;
@@ -309,13 +302,13 @@ static void pidMultiWii23(pidProfile_t *pidProfile, controlRateConfig_t *control
     int32_t delta;
 
     if (FLIGHT_MODE(HORIZON_MODE)) {
-        prop = MIN(MAX(ABS(rcCommandForPID[PITCH]), ABS(rcCommandForPID[ROLL])), 512);
+        prop = MIN(MAX(ABS(rcCommand[PITCH]), ABS(rcCommand[ROLL])), 512);
     }
 
     // PITCH & ROLL
     for (axis = 0; axis < 2; axis++) {
 
-        rc = rcCommandForPID[axis] << 1;
+        rc = rcCommand[axis] << 1;
 
         error = rc - (gyroData[axis] / 4);
         errorGyroI[axis]  = constrain(errorGyroI[axis] + error, -16000, +16000);   // WindUp   16 bits is ok here
@@ -330,7 +323,7 @@ static void pidMultiWii23(pidProfile_t *pidProfile, controlRateConfig_t *control
 
         if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {   // axis relying on ACC
             // 50 degrees max inclination
-            errorAngle = constrain(2 * rcCommandForPID[axis], -((int) max_angle_inclination),
+            errorAngle = constrain(2 * rcCommand[axis], -((int) max_angle_inclination),
                 +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis];
 
 #ifdef AUTOTUNE
@@ -372,7 +365,7 @@ static void pidMultiWii23(pidProfile_t *pidProfile, controlRateConfig_t *control
     }
 
     //YAW
-    rc = (int32_t)rcCommandForPID[FD_YAW] * (2 * controlRateConfig->rates[FD_YAW] + 30)  >> 5;
+    rc = (int32_t)rcCommand[FD_YAW] * (2 * controlRateConfig->rates[FD_YAW] + 30)  >> 5;
 #ifdef ALIENWII32
     error = rc - gyroData[FD_YAW];
 #else
@@ -416,12 +409,12 @@ static void pidMultiWiiHybrid(pidProfile_t *pidProfile, controlRateConfig_t *con
     UNUSED(controlRateConfig);
 
     // **** PITCH & ROLL ****
-    prop = MIN(MAX(ABS(rcCommandForPID[PITCH]), ABS(rcCommandForPID[ROLL])), 500); // range [0;500]
+    prop = MIN(MAX(ABS(rcCommand[PITCH]), ABS(rcCommand[ROLL])), 500); // range [0;500]
 
     for (axis = 0; axis < 2; axis++) {
         if ((FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE))) { // MODE relying on ACC
             // observe max inclination
-            errorAngle = constrain(2 * rcCommandForPID[axis], -((int) max_angle_inclination),
+            errorAngle = constrain(2 * rcCommand[axis], -((int) max_angle_inclination),
                     +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis];
 
 #ifdef AUTOTUNE
@@ -437,10 +430,10 @@ static void pidMultiWiiHybrid(pidProfile_t *pidProfile, controlRateConfig_t *con
             ITermACC = (errorAngleI[axis] * pidProfile->I8[PIDLEVEL]) >> 12;
         }
         if (!FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) { // MODE relying on GYRO
-            error = (int32_t) rcCommandForPID[axis] * 10 * 8 / pidProfile->P8[axis];
+            error = (int32_t) rcCommand[axis] * 10 * 8 / pidProfile->P8[axis];
             error -= gyroData[axis] / 4;
 
-            PTermGYRO = rcCommandForPID[axis];
+            PTermGYRO = rcCommand[axis];
 
             errorGyroI[axis] = constrain(errorGyroI[axis] + error, -16000, +16000); // WindUp
             if (ABS(gyroData[axis]) > (640 * 4))
@@ -477,7 +470,7 @@ static void pidMultiWiiHybrid(pidProfile_t *pidProfile, controlRateConfig_t *con
 #endif
     }
     //YAW
-    rc = (int32_t)rcCommandForPID[FD_YAW] * (2 * controlRateConfig->rates[FD_YAW] + 30)  >> 5;
+    rc = (int32_t)rcCommand[FD_YAW] * (2 * controlRateConfig->rates[FD_YAW] + 30)  >> 5;
 #ifdef ALIENWII32
     error = rc - gyroData[FD_YAW];
 #else
@@ -515,7 +508,7 @@ rollAndPitchTrims_t *angleTrim, rxConfig_t *rxConfig)
 {
     UNUSED(rxConfig);
 
-    float delta, RCfactor, rcCommandForPIDAxis, MainDptCut, gyroDataQuant;
+    float delta, RCfactor, rcCommandAxis, MainDptCut, gyroDataQuant;
     float PTerm, ITerm, DTerm, PTermACC = 0.0f, ITermACC = 0.0f, ITermGYRO, error, prop = 0.0f;
     static float lastGyro[2] = { 0.0f, 0.0f }, lastDTerm[2] = { 0.0f, 0.0f };
     uint8_t axis;
@@ -528,15 +521,15 @@ rollAndPitchTrims_t *angleTrim, rxConfig_t *rxConfig)
     RCfactor = ACCDeltaTimeINS / (MainDptCut + ACCDeltaTimeINS);               // used for pt1 element
 
     if (FLIGHT_MODE(HORIZON_MODE)) {
-        prop = (float)MIN(MAX(ABS(rcCommandForPID[PITCH]), ABS(rcCommandForPID[ROLL])), 450) / 450.0f;
+        prop = (float)MIN(MAX(ABS(rcCommand[PITCH]), ABS(rcCommand[ROLL])), 450) / 450.0f;
     }
 
     for (axis = 0; axis < 2; axis++) {
         int32_t tmp = (int32_t)((float)gyroData[axis] * 0.3125f);              // Multiwii masks out the last 2 bits, this has the same idea
         gyroDataQuant = (float)tmp * 3.2f;                                     // but delivers more accuracy and also reduces jittery flight
-        rcCommandForPIDAxis = (float)rcCommandForPID[axis];                                // Calculate common values for pid controllers
+        rcCommandAxis = (float)rcCommand[axis];                                // Calculate common values for pid controllers
         if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {
-            error = constrain(2.0f * rcCommandForPIDAxis, -((int) max_angle_inclination), +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis];
+            error = constrain(2.0f * rcCommandAxis, -((int) max_angle_inclination), +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis];
 
 #ifdef AUTOTUNE
             if (shouldAutotune()) {
@@ -554,17 +547,17 @@ rollAndPitchTrims_t *angleTrim, rxConfig_t *rxConfig)
             if (ABS((int16_t)gyroData[axis]) > 2560) {
                 errorGyroIf[axis] = 0.0f;
             } else {
-                error = (rcCommandForPIDAxis * 320.0f / (float)pidProfile->P8[axis]) - gyroDataQuant;
+                error = (rcCommandAxis * 320.0f / (float)pidProfile->P8[axis]) - gyroDataQuant;
                 errorGyroIf[axis] = constrainf(errorGyroIf[axis] + error * ACCDeltaTimeINS, -192.0f, +192.0f);
             }
 
             ITermGYRO = errorGyroIf[axis] * (float)pidProfile->I8[axis] * 0.01f;
 
             if (FLIGHT_MODE(HORIZON_MODE)) {
-                PTerm = PTermACC + prop * (rcCommandForPIDAxis - PTermACC);
+                PTerm = PTermACC + prop * (rcCommandAxis - PTermACC);
                 ITerm = ITermACC + prop * (ITermGYRO - ITermACC);
             } else {
-                PTerm = rcCommandForPIDAxis;
+                PTerm = rcCommandAxis;
                 ITerm = ITermGYRO;
             }
         } else {
@@ -592,18 +585,18 @@ rollAndPitchTrims_t *angleTrim, rxConfig_t *rxConfig)
     Mwii3msTimescale /= 3000.0f;
 
     if (OLD_YAW) { // [0/1] 0 = multiwii 2.3 yaw, 1 = older yaw. hardcoded for now
-        PTerm = ((int32_t)pidProfile->P8[FD_YAW] * (100 - (int32_t)controlRateConfig->rates[FD_YAW] * (int32_t)ABS(rcCommandForPID[FD_YAW]) / 500)) / 100;
+        PTerm = ((int32_t)pidProfile->P8[FD_YAW] * (100 - (int32_t)controlRateConfig->rates[FD_YAW] * (int32_t)ABS(rcCommand[FD_YAW]) / 500)) / 100;
         int32_t tmp = lrintf(gyroData[FD_YAW] * 0.25f);
-        PTerm = rcCommandForPID[FD_YAW] - tmp * PTerm / 80;
-        if ((ABS(tmp) > 640) || (ABS(rcCommandForPID[FD_YAW]) > 100)) {
+        PTerm = rcCommand[FD_YAW] - tmp * PTerm / 80;
+        if ((ABS(tmp) > 640) || (ABS(rcCommand[FD_YAW]) > 100)) {
             errorGyroI[FD_YAW] = 0;
         } else {
-            error = ((int32_t)rcCommandForPID[FD_YAW] * 80 / (int32_t)pidProfile->P8[FD_YAW]) - tmp;
+            error = ((int32_t)rcCommand[FD_YAW] * 80 / (int32_t)pidProfile->P8[FD_YAW]) - tmp;
             errorGyroI[FD_YAW] = constrain(errorGyroI[FD_YAW] + (int32_t)(error * Mwii3msTimescale), -16000, +16000); // WindUp
             ITerm = (errorGyroI[FD_YAW] / 125 * pidProfile->I8[FD_YAW]) >> 6;
         }
     } else {
-        int32_t tmp = ((int32_t)rcCommandForPID[FD_YAW] * (((int32_t)controlRateConfig->rates[FD_YAW] << 1) + 40)) >> 5;
+        int32_t tmp = ((int32_t)rcCommand[FD_YAW] * (((int32_t)controlRateConfig->rates[FD_YAW] << 1) + 40)) >> 5;
         error = tmp - lrintf(gyroData[FD_YAW] * 0.25f);                       // Less Gyrojitter works actually better
 
         if (ABS(tmp) > 50) {
@@ -647,11 +640,11 @@ static void pidRewrite(pidProfile_t *pidProfile, controlRateConfig_t *controlRat
         uint8_t rate = controlRateConfig->rates[axis];
 
         // -----Get the desired angle rate depending on flight mode
-        if (axis == FD_YAW) { // YAW is always gyro-controlled (MAG correction is applied to rcCommandForPID)
-            AngleRateTmp = (((int32_t)(rate + 27) * rcCommandForPID[YAW]) >> 5);
+        if (axis == FD_YAW) { // YAW is always gyro-controlled (MAG correction is applied to rcCommand)
+            AngleRateTmp = (((int32_t)(rate + 27) * rcCommand[YAW]) >> 5);
         } else {
             // calculate error and limit the angle to max configured inclination
-            errorAngle = constrain(2 * rcCommandForPID[axis], -((int) max_angle_inclination),
+            errorAngle = constrain(2 * rcCommand[axis], -((int) max_angle_inclination),
                     +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis]; // 16 bits is ok here
 
 #ifdef AUTOTUNE
@@ -661,7 +654,7 @@ static void pidRewrite(pidProfile_t *pidProfile, controlRateConfig_t *controlRat
 #endif
 
             if (!FLIGHT_MODE(ANGLE_MODE)) { //control is GYRO based (ACRO and HORIZON - direct sticks control is applied to rate PID
-                AngleRateTmp = ((int32_t)(rate + 27) * rcCommandForPID[axis]) >> 4;
+                AngleRateTmp = ((int32_t)(rate + 27) * rcCommand[axis]) >> 4;
                 if (FLIGHT_MODE(HORIZON_MODE)) {
                     // mix up angle error to desired AngleRateTmp to add a little auto-level feel
                     AngleRateTmp += (errorAngle * pidProfile->I8[PIDLEVEL]) >> 8;
@@ -674,7 +667,7 @@ static void pidRewrite(pidProfile_t *pidProfile, controlRateConfig_t *controlRat
         // --------low-level gyro-based PID. ----------
         // Used in stand-alone mode for ACRO, controlled by higher level regulators in other modes
         // -----calculate scaled error.AngleRates
-        // multiplication of rcCommandForPID corresponds to changing the sticks scaling here
+        // multiplication of rcCommand corresponds to changing the sticks scaling here
         RateError = AngleRateTmp - (gyroData[axis] / 4);
 
         // -----calculate P component

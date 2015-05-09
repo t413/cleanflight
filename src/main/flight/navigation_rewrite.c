@@ -109,7 +109,6 @@ static int32_t desiredHeading;
 
 // Desired pitch/roll/yaw/throttle adjustments
 static int16_t rcAdjustment[4];
-int16_t rcCommandNav[4];
 
 // Current navigation mode & profile
 navigationMode_e navMode = NAV_MODE_NONE;    // Navigation mode
@@ -670,12 +669,6 @@ void applyWaypointNavigationAndAltitudeHold(void)
     // If throttle low don't apply navigation either 
     // TODO
     
-    // Set rcCommandNav to rcCommand (passthrough control)
-    rcCommandNav[PITCH] = rcCommand[PITCH];
-    rcCommandNav[ROLL] = rcCommand[ROLL];
-    rcCommandNav[YAW] = rcCommand[YAW];
-    rcCommandNav[THROTTLE] = rcCommand[THROTTLE];
-
     // Apply navigation adjustments
     if (STATE(FIXED_WING)) { // FIXED_WING
         // TODO
@@ -692,7 +685,7 @@ void applyWaypointNavigationAndAltitudeHold(void)
 
             // Apply rcAdjustment to throttle
             // FIXME: Add hover_throttle parameter and use it here instead of altholdInitialThrottle
-            rcCommandNav[THROTTLE] = constrain(altholdInitialThrottle + rcAdjustment[THROTTLE], masterConfig.escAndServoConfig.minthrottle, masterConfig.escAndServoConfig.maxthrottle);
+            rcCommand[THROTTLE] = constrain(altholdInitialThrottle + rcAdjustment[THROTTLE], masterConfig.escAndServoConfig.minthrottle, masterConfig.escAndServoConfig.maxthrottle);
         }
 
         if (navShouldApplyPosHold() || navShouldApplyWaypoint() || navShouldApplyHeadingControl()) {
@@ -713,12 +706,12 @@ void applyWaypointNavigationAndAltitudeHold(void)
 
             // Apply rcAdjustment to pitch/roll
             if (navShouldApplyPosHold() || navShouldApplyWaypoint()) {
-                rcCommandNav[PITCH] = constrain(rcAdjustment[PITCH], -NAV_ROLL_PITCH_MAX, NAV_ROLL_PITCH_MAX);
-                rcCommandNav[ROLL] = constrain(rcAdjustment[ROLL], -NAV_ROLL_PITCH_MAX, NAV_ROLL_PITCH_MAX);
+                rcCommand[PITCH] = constrain(rcAdjustment[PITCH], -NAV_ROLL_PITCH_MAX, NAV_ROLL_PITCH_MAX);
+                rcCommand[ROLL] = constrain(rcAdjustment[ROLL], -NAV_ROLL_PITCH_MAX, NAV_ROLL_PITCH_MAX);
             }
 
             if (navShouldApplyHeadingControl()) {
-                rcCommandNav[YAW] = constrain(rcAdjustment[YAW], -500, 500);
+                rcCommand[YAW] = constrain(rcAdjustment[YAW], -500, 500);
             }
         }
     }
@@ -727,10 +720,10 @@ void applyWaypointNavigationAndAltitudeHold(void)
     debug[0] = actualPosition.coordinates[LAT] - activeWpOrHoldPosition.coordinates[LAT];
     debug[1] = desiredHorizontalVel[Y];
     debug[2] = actualHorizontalVelocity[Y];
-    debug[3] = rcCommandNav[PITCH];
+    debug[3] = rcCommand[PITCH];
 */
     
-    //debug[0] = rcCommandNav[THROTTLE];
+    //debug[0] = rcCommand[THROTTLE];
     //debug[2] = desiredHorizontalVel[LON];
     
 }

@@ -57,13 +57,6 @@
 
 #define AUX_FORWARD_CHANNEL_TO_SERVO_COUNT 4
 
-// If GPS defined, use rcCommandNav (adjusted by navigation)
-#ifdef GPS
-    #define rcCommandForMixer rcCommandNav
-#else
-    #define rcCommandForMixer rcCommand
-#endif
-
 //#define MIXER_DEBUG
 
 uint8_t motorCount = 0;
@@ -529,7 +522,7 @@ static void airplaneMixer(void)
     if (!ARMING_FLAG(ARMED))
         servo[7] = escAndServoConfig->mincommand; // Kill throttle when disarmed
     else
-        servo[7] = constrain(rcCommandForMixer[THROTTLE], escAndServoConfig->minthrottle, escAndServoConfig->maxthrottle);
+        servo[7] = constrain(rcCommand[THROTTLE], escAndServoConfig->minthrottle, escAndServoConfig->maxthrottle);
     motor[0] = servo[7];
 
     if (airplaneConfig->flaps_speed) {
@@ -574,14 +567,14 @@ void mixTable(void)
 
     if (motorCount >= 4 &&  mixerConfig->yaw_jump_prevention_limit < 500) {
         // prevent "yaw jump" during yaw correction (500 is disabled jump protection)
-        axisPID[YAW] = constrain(axisPID[YAW], -mixerConfig->yaw_jump_prevention_limit - ABS(rcCommandForMixer[YAW]), mixerConfig->yaw_jump_prevention_limit + ABS(rcCommandForMixer[YAW]));
+        axisPID[YAW] = constrain(axisPID[YAW], -mixerConfig->yaw_jump_prevention_limit - ABS(rcCommand[YAW]), mixerConfig->yaw_jump_prevention_limit + ABS(rcCommand[YAW]));
     }
 
     // motors for non-servo mixes
     if (motorCount > 1) {
         for (i = 0; i < motorCount; i++) {
             motor[i] =
-                rcCommandForMixer[THROTTLE] * currentMixer[i].throttle +
+                rcCommand[THROTTLE] * currentMixer[i].throttle +
                 axisPID[PITCH] * currentMixer[i].pitch +
                 axisPID[ROLL] * currentMixer[i].roll +
                 -mixerConfig->yaw_direction * axisPID[YAW] * currentMixer[i].yaw;
@@ -620,12 +613,12 @@ void mixTable(void)
             if (!ARMING_FLAG(ARMED))
                 servo[7] = escAndServoConfig->mincommand;
             else
-                servo[7] = constrain(rcCommandForMixer[THROTTLE], escAndServoConfig->minthrottle, escAndServoConfig->maxthrottle);
+                servo[7] = constrain(rcCommand[THROTTLE], escAndServoConfig->minthrottle, escAndServoConfig->maxthrottle);
             motor[0] = servo[7];
             if (FLIGHT_MODE(PASSTHRU_MODE)) {
                 // do not use sensors for correction, simple 2 channel mixing
-                servo[3] = (servoDirection(3, 1) * rcCommandForMixer[PITCH]) + (servoDirection(3, 2) * rcCommandForMixer[ROLL]);
-                servo[4] = (servoDirection(4, 1) * rcCommandForMixer[PITCH]) + (servoDirection(4, 2) * rcCommandForMixer[ROLL]);
+                servo[3] = (servoDirection(3, 1) * rcCommand[PITCH]) + (servoDirection(3, 2) * rcCommand[ROLL]);
+                servo[4] = (servoDirection(4, 1) * rcCommand[PITCH]) + (servoDirection(4, 2) * rcCommand[ROLL]);
             } else {
                 // use sensors to correct (gyro only or gyro + acc)
                 servo[3] = (servoDirection(3, 1) * axisPID[PITCH]) + (servoDirection(3, 2) * axisPID[ROLL]);
@@ -647,7 +640,7 @@ void mixTable(void)
                 servo[i] = (axisPID[YAW] * servoDirection(i, 2)) + (axisPID[(6 - i) >> 1] * servoDirection(i, 1)); // mix and setup direction
                 servo[i] += determineServoMiddleOrForwardFromChannel(i);
             }
-            motor[0] = rcCommandForMixer[THROTTLE];
+            motor[0] = rcCommand[THROTTLE];
             break;
 
         default:
