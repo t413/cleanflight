@@ -691,6 +691,7 @@ void applyWaypointNavigationAndAltitudeHold(void)
             calculateThrottleAdjustment(dTnav);
 
             // Apply rcAdjustment to throttle
+            // FIXME: Add hover_throttle parameter and use it here instead of altholdInitialThrottle
             rcCommandNav[THROTTLE] = constrain(altholdInitialThrottle + rcAdjustment[THROTTLE], masterConfig.escAndServoConfig.minthrottle, masterConfig.escAndServoConfig.maxthrottle);
         }
 
